@@ -36,7 +36,7 @@ import calendar
 import socket
 import os
 import ssl
-import copy 
+import copy
 
 from hashlib import sha1
 from base64 import b64decode, b64encode
@@ -470,7 +470,7 @@ class SigUtils():
     def validateUserSignatureWithExpiration(UID, timestamp, secret, signature, expiration):
         expired = SigUtils.signatureTimestampExpired(timestamp, expiration)
         signatureValidated = SigUtils.validateUserSignature(UID, timestamp, secret, signature)
-        return not expired and signatureValidated 
+        return not expired and signatureValidated
 
     @staticmethod
     def validateFriendSignature(UID, timestamp, friendUID, secret, signature, expiration=None):
@@ -480,7 +480,7 @@ class SigUtils():
             return expectedSig == signature
         else:
             expired = SigUtils.signatureTimestampExpired(timestamp, expiration)
-            return not expired and expectedSig == signature 
+            return not expired and expectedSig == signature
 
     @staticmethod
     def validateFriendSignatureWithExpiration(UID, timestamp, friendUID, secret, signature, expiration):
@@ -525,7 +525,3 @@ class SigUtils():
         now = int(round(time.time()))
         timestamp = int(signatureTimestampExpired)
         return abs(now - timestamp) > expiration
-
-
-
-
