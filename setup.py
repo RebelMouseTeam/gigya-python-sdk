@@ -6,5 +6,5 @@ setup(
     version = '3.3.5',
     url = '',
     description = 'Gigya Python SDK',
-    packages = find_packages("../")
+    packages = find_packages()
 )
