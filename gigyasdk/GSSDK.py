@@ -8,7 +8,6 @@ PY_3 = sys.version_info[0] >= 3
 if PY_3:
     import urllib.request
     from urllib.request import build_opener
-    from urllib.request import HTTPHandler
     from urllib.request import ProxyHandler
     from urllib.request import install_opener
     from urllib.request import urlopen
@@ -20,7 +19,6 @@ if PY_3:
 else:
     import urllib2
     from urllib2 import build_opener
-    from urllib2 import HTTPHandler
     from urllib2 import ProxyHandler
     from urllib2 import install_opener
     from urllib2 import urlopen
@@ -63,8 +61,7 @@ class GSException(Exception):
 
 class GSRequest():
     DEFAULT_API_DOMAIN = "us1.gigya.com"
-    VERSION = "3.3.5"
-    caCertsPath = os.path.join(os.path.dirname(__file__), "cacert.pem")
+    VERSION = "3.3.7"
 
     _domain = ""
     _path = ""
@@ -77,10 +74,9 @@ class GSRequest():
     _secretKey = ""
     _userKey = ""
     _params = {}
-    _useHTTPS = False
     _apiDomain = DEFAULT_API_DOMAIN
 
-    def __init__(self, apiKey=None, secretKey=None, apiMethod=None, params=None, useHTTPS=False, userKey=None):
+    def __init__(self, apiKey=None, secretKey=None, apiMethod=None, params=None, userKey=None):
         """
          Constructs a request using the apiKey and secretKey.
          @param apiKey
@@ -88,7 +84,6 @@ class GSRequest():
          @param apiMethod the api method (including namespace) to call. for example: socialize.getUserInfo
          If namespaces is not supplied "socialize" is assumed
          @param params the request parameters
-         @param useHTTPS useHTTPS set this to true if you want to use HTTPS.
          @param userKey A key of an admin user with extra permissions.
          If this parameter is provided, then the secretKey parameter is assumed to be the admin user's secret key and not the site's secret key.
         """
@@ -108,7 +103,6 @@ class GSRequest():
             self._params = dict([k, v.encode('utf-8')] for k, v in params.items())
 
         self._domain = self._params.get("_host", self._domain)
-        self._useHTTPS = useHTTPS
         self._apiKey = apiKey
         self._secretKey = secretKey
         self._userKey = userKey
@@ -158,17 +152,13 @@ class GSRequest():
         if (self._method is None or (self._apiKey is None and self._userKey is None)):
             return GSResponse(self._method, None, self._params, 400002, None, self._traceLog)
 
-        if (self._useHTTPS and not os.path.isfile(GSRequest.caCertsPath)):
-            return GSResponse(self._method, None, self._params, 400003, None, self._traceLog)
-
         try:
             self.setParam("httpStatusCodes", "false")
             self.traceField("apiKey", self._apiKey)
             self.traceField("apiMethod", self._method)
             self.traceField("params", self._params)
-            self.traceField("useHTTPS", self._useHTTPS)
             self.traceField("userKey", self._userKey)
-            responseStr = self.sendRequest("POST", self._host, self._path, self._params, self._apiKey, self._secretKey, self._useHTTPS, timeout, self._userKey)
+            responseStr = self.sendRequest("POST", self._host, self._path, self._params, self._apiKey, self._secretKey, timeout, self._userKey)
 
             return GSResponse(self._method, responseStr, None, 0, None, self._traceLog)
 
@@ -183,12 +173,11 @@ class GSRequest():
 
             return GSResponse(self._method, None, self._params, errCode, errMsg, self._traceLog)
 
-    def sendRequest(self, httpMethod, domain, path, params, token, secret=None, useHTTPS=False, timeout=None, userKey=None):
+    def sendRequest(self, httpMethod, domain, path, params, token, secret=None, timeout=None, userKey=None):
 
         params["sdk"] = "python_" + self.VERSION
         # prepare query params
-        protocol = "https" if (useHTTPS or not secret) else "http"
-        resourceURI = protocol + "://" + self._domain + path
+        resourceURI = "https://" + self._domain + path
 
         timestamp = calendar.timegm(time.gmtime())
 
@@ -205,7 +194,7 @@ class GSRequest():
             params["nonce"] = nonce
 
             # signature
-            signature = self.getOAuth1Signature(secret, httpMethod, resourceURI, useHTTPS, params)
+            signature = self.getOAuth1Signature(secret, httpMethod, resourceURI, params)
             params["sig"] = signature
         else:
             params["oauth_token"] = token
@@ -224,17 +213,13 @@ class GSRequest():
         self.traceField("URL", url)
         self.traceField("postData", queryString)
 
-        proto = "https" if self._useHTTPS else "http"
-
         if self._proxy:
             opener = build_opener(
-                HTTPHandler(),
-                ValidHTTPSHandler(),
-                ProxyHandler({proto: self._proxy}))
+                HTTPSHandler(),
+                ProxyHandler({"https": self._proxy}))
         else:
             opener = build_opener(
-                HTTPHandler(),
-                ValidHTTPSHandler())
+                HTTPSHandler())
 
         queryString = queryString.encode('utf-8')
 
@@ -268,25 +253,20 @@ class GSRequest():
 
         return queryString
 
-    def getOAuth1Signature(self, key, httpMethod, url, isSecureConnection, requestParams):
+    def getOAuth1Signature(self, key, httpMethod, url, requestParams):
         # Create the BaseString.
-        baseString = self.calcOAuth1BaseString(httpMethod, url, isSecureConnection, requestParams)
+        baseString = self.calcOAuth1BaseString(httpMethod, url, requestParams)
         self.traceField("baseString", baseString)
 
         return SigUtils.calcSignature(baseString, key)
 
-    def calcOAuth1BaseString(self, httpMethod, url, isSecureConnection, requestParams):
+    def calcOAuth1BaseString(self, httpMethod, url, requestParams):
         normalizedUrl = ""
         u = urlparse(url)
-
-        if isSecureConnection:
-            protocol = "https"
-        else:
-            protocol = u.scheme.lower()
-
+        protocol = "https"
         port = u.port
 
-        normalizedUrl += protocol + "://"
+        normalizedUrl += "https://"
         normalizedUrl += u.hostname.lower()
 
         if port != None and ((protocol == "http" and port != 80) or (protocol == "https" and port != 443)):
@@ -318,10 +298,6 @@ class GSRequest():
     def traceField(self, name, value):
         if value:
             self._traceLog.append(str(name) + "=" + repr(value))
-
-    @staticmethod
-    def setCACertsPath(path):
-        GSRequest.caCertsPath = path
 
 
 class GSResponse():
@@ -433,25 +409,6 @@ class GSResponse():
         sb += "\n\tdata:"
         sb += str(self.data)
         return sb
-
-
-class ValidHTTPSConnection(HTTPConnection):
-    default_port = HTTPS_PORT
-
-    def __init__(self, *args, **kwargs):
-        HTTPConnection.__init__(self, *args, **kwargs)
-
-    def connect(self):
-        sock = socket.create_connection((self.host, self.port), self.timeout, self.source_address)
-
-        if self._tunnel_host:
-            self.sock = sock
-            self._tunnel()
-        self.sock = ssl.wrap_socket(sock, ca_certs=GSRequest.caCertsPath, cert_reqs=ssl.CERT_REQUIRED)
-
-class ValidHTTPSHandler(HTTPSHandler):
-    def https_open(self, req):
-        return self.do_open(ValidHTTPSConnection, req)
 
 
 class SigUtils():
